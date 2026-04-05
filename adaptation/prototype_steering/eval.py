@@ -122,7 +122,6 @@ def main():
                 rows.append({"user_idx": int(user), "cluster_id": cluster_id,
                               "rank": rank, **metrics_from_rank(rank)})
 
-    import pandas as pd
     base_df = pd.DataFrame(base_rows)
     adpt_df = pd.DataFrame(adpt_rows)
     base_m  = summarize(base_df)
