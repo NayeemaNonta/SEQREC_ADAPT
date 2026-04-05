@@ -41,8 +41,8 @@ import torch
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from sasrec.model import SASRec
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from backbone.model import SASRec
 
 
 def set_seed(seed: int):
