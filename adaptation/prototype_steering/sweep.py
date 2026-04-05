@@ -30,7 +30,7 @@ from sweep_utils import run_cmd, load_summary, build_sweep_row, print_best
 
 
 GRID = {
-    "num_clusters":   [3, 5, 10],
+    "num_clusters":   [1],
     "bottleneck_dim": [16, 32, 64],
     "lr":             [1e-3, 5e-4],
     "epochs":         [20],
