@@ -3,12 +3,12 @@
 # Override any value via CLI flags.
 
 training:
-  lr: 1e-4
-  weight_decay: 0.0
-  epochs: 20
+  lr: 5e-4                    # best from sweep (contiguous: lr5e-4/ep50/ln1/wd1e-4 → NDCG@10 +4.24%)
+  weight_decay: 1e-4
+  epochs: 50
   batch_size: 256
   eval_batch_size: 512
-  include_last_layernorm: false
+  include_last_layernorm: true
   seed: 42
 
 evaluation:
