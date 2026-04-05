@@ -1,0 +1,21 @@
+# configs/experiment_base.yaml
+# Base paths and shared settings for a full experiment run.
+# Override per-run by passing CLI flags to individual scripts.
+
+paths:
+  raw_data:      data/raw/30music.tsv
+  processed_dir: data/processed
+  backbone_ckpt: results/backbone/sasrec_backbone_best.pt
+  results_dir:   results
+
+data:
+  train_end:         "2014-01-01"   # historical / future cutoff
+  val_end:           "2014-04-01"   # adapt / test cutoff within future
+  min_interactions:  5              # k-core threshold
+  drift_top_k:       0.3            # top 30% by drift score
+
+evaluation:
+  num_neg_eval: 100
+  seed: 42
+
+device: cuda

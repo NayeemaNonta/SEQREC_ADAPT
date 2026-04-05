@@ -1,0 +1,22 @@
+# adaptation/prototype_steering/config.yaml
+
+adapter:
+  num_clusters:   5
+  bottleneck_dim: 32
+
+training:
+  lr: 1e-3
+  weight_decay: 0.0
+  epochs: 20
+  batch_size: 256
+  num_neg_train: 10
+  seed: 42
+
+evaluation:
+  num_neg_eval: 100
+  seed: 42
+
+sweep:
+  num_clusters:   [3, 5, 10]
+  bottleneck_dim: [16, 32, 64]
+  lr:             [1e-3, 5e-4]

@@ -1,0 +1,26 @@
+# backbone/configs/sasrec_base.yaml
+# SASRec backbone training configuration.
+
+model:
+  hidden_units: 64
+  num_blocks: 2
+  num_heads: 2
+  dropout_rate: 0.2
+  maxlen: 128
+  pos_enc: true
+
+training:
+  epochs: 200
+  batch_size: 128
+  lr: 1e-3
+  weight_decay: 0.0
+  patience: 20           # early stopping: stop if no NDCG@10 improvement for N epochs
+  eval_every: 5          # evaluate on val set every N epochs
+  num_neg_eval: 100      # negatives per user during val ranking eval
+  seed: 42
+  device: cuda
+
+paths:
+  hist_data: ~           # required: path to filtered historical interactions CSV
+  val_data: ~            # required: path to val interactions CSV
+  output_dir: ~          # required: checkpoint output directory
