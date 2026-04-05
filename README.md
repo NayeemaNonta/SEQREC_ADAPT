@@ -47,31 +47,66 @@ All modes share the same:
 
 ## Quickstart
 
-### 1. Build dataset
+### 1. Build dataset splits
+
+Produces two temporal splits from the 30M interaction CSV (default: 10M total, 5M hist + 5M future):
 
 ```bash
-python data/create_dataset/build_dataset.py \
-  --raw_data data/raw/30music.tsv \
-  --output_dir data/processed \
-  --train_end 2014-01-01 --val_end 2014-04-01
+python data/create_dataset/create_adaptation_split.py \
+  --src data/data_csv/30M.csv
+
+# To use a different total size (e.g. 5M):
+python data/create_dataset/create_adaptation_split.py \
+  --src data/data_csv/30M.csv --total 5000000
 ```
 
-### 2. Filter high-drift users
+Outputs two directories under `data/data_csv/splits/`:
+- `split_10M_contiguous/` — hist=first 5M, future=rows 5M–10M (immediately after)
+- `split_10M_tail/` — hist=first 5M, future=last 5M of the full 30M dataset
+
+Each contains: `interactions_hist.csv`, `interactions_future.csv`, `interactions_future_adapt.csv` (70%), `interactions_future_test.csv` (30%), `split_metadata.json`.
+
+### 2. Run preprocessing pipeline
+
+Applies k-core filtering, detects high-drift users, and produces final train/adapt/test subsets. Run once per split:
 
 ```bash
+# Split A — contiguous
 python data/preprocessing/run_pipeline.py \
-  --hist_data data/processed/hist_kcore.csv \
-  --future_data data/processed/future.csv \
-  --backbone_ckpt results/backbone/sasrec_backbone_best.pt \
-  --output_dir data/processed/high_drift
+  --hist_data         data/data_csv/splits/split_10M_contiguous/interactions_hist.csv \
+  --future_adapt_data data/data_csv/splits/split_10M_contiguous/interactions_future_adapt.csv \
+  --future_test_data  data/data_csv/splits/split_10M_contiguous/interactions_future_test.csv \
+  --backbone_ckpt     results/backbone/sasrec_backbone_best.pt \
+  --output_dir        data/processed/split_10M_contiguous \
+  --device cuda
+
+# Split B — tail
+python data/preprocessing/run_pipeline.py \
+  --hist_data         data/data_csv/splits/split_10M_tail/interactions_hist.csv \
+  --future_adapt_data data/data_csv/splits/split_10M_tail/interactions_future_adapt.csv \
+  --future_test_data  data/data_csv/splits/split_10M_tail/interactions_future_test.csv \
+  --backbone_ckpt     results/backbone/sasrec_backbone_best.pt \
+  --output_dir        data/processed/split_10M_tail \
+  --device cuda
 ```
+
+Pipeline steps (run in this order automatically):
+1. `filter_to_overlap_items_kcore.py` — k-core on hist; restrict future files to surviving items
+2. `detect_high_drift_users_overlap.py` — score users by preference drift using the backbone
+3. `filter_to_selected_users_kcore.py` — filter to high-drift users and re-apply k-core
+4. `build_final_drift_scores.py` — attach user indices to final drift scores
+
+Outputs per split (in `data/processed/split_10M_*/`):
+- `hist_high_drift_kcore.csv` — backbone training data
+- `future_adapt_high_drift_kcore.csv` — adaptation data
+- `future_test_high_drift_kcore.csv` — evaluation data
 
 ### 3. Train backbone (T1)
 
 ```bash
 python backbone/train_backbone.py \
-  --hist_data data/processed/hist_kcore.csv \
-  --val_data  data/processed/future_val.csv \
+  --hist_data  data/processed/split_10M_contiguous/hist_high_drift_kcore.csv \
+  --val_data   data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
   --output_dir results/backbone --device cuda
 ```
 
@@ -81,22 +116,38 @@ python backbone/train_backbone.py \
 # Last-block fine-tuning
 python adaptation/last_block/train.py \
   --checkpoint results/backbone/sasrec_backbone_best.pt \
-  --adapt_data data/processed/high_drift/future_adapt.csv \
+  --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
   --output_dir results/last_block --device cuda
 
 python adaptation/last_block/eval.py \
   --checkpoint    results/backbone/sasrec_backbone_best.pt \
   --ft_checkpoint results/last_block/last_block_best.pt \
-  --test_data     data/processed/high_drift/future_test.csv \
+  --test_data     data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
   --outdir        results/last_block/eval
 
 # Context gate adapter
-python adaptation/context_steering/train.py ...
-python adaptation/context_steering/eval.py  ...
+python adaptation/context_steering/train.py \
+  --checkpoint results/backbone/sasrec_backbone_best.pt \
+  --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
+  --output_dir results/context_gate --device cuda
+
+python adaptation/context_steering/eval.py \
+  --checkpoint       results/backbone/sasrec_backbone_best.pt \
+  --adapt_checkpoint results/context_gate/context_gate_best.pt \
+  --test_data        data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
+  --outdir           results/context_gate/eval
 
 # Prototype steering
-python adaptation/prototype_steering/train.py ...
-python adaptation/prototype_steering/eval.py  ...
+python adaptation/prototype_steering/train.py \
+  --checkpoint results/backbone/sasrec_backbone_best.pt \
+  --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
+  --output_dir results/prototype_steering --device cuda
+
+python adaptation/prototype_steering/eval.py \
+  --checkpoint       results/backbone/sasrec_backbone_best.pt \
+  --adapt_checkpoint results/prototype_steering/prototype_steering_best.pt \
+  --test_data        data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
+  --outdir           results/prototype_steering/eval
 ```
 
 ### 5. Hyperparameter sweeps
@@ -106,8 +157,8 @@ Each adaptation mode has a `sweep.py` that runs a full grid search and writes re
 ```bash
 python adaptation/last_block/sweep.py \
   --checkpoint  results/backbone/sasrec_backbone_best.pt \
-  --adapt_data  data/processed/high_drift/future_adapt.csv \
-  --test_data   data/processed/high_drift/future_test.csv \
+  --adapt_data  data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
+  --test_data   data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
   --base_outdir results/sweep_last_block --device cuda
 ```
 
