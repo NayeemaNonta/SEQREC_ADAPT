@@ -17,6 +17,6 @@ evaluation:
   seed: 42
 
 sweep:
-  num_clusters:   [3, 5, 10]
+  num_clusters:   [1]
   bottleneck_dim: [16, 32, 64]
   lr:             [1e-3, 5e-4]

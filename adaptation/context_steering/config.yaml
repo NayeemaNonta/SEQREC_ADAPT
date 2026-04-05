@@ -9,7 +9,7 @@ adapter:
 training:
   lr: 5e-4
   weight_decay: 0.0
-  epochs: 15
+  epochs: 10          # best from sweep (contiguous: bd8/lr5e-4/ep10 → NDCG@10 +7.1%)
   batch_size: 256
   num_neg_train: 10
   seed: 42
