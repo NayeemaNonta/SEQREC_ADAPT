@@ -6,9 +6,10 @@ Runner for the drift-based user filtering pipeline.
 
 Steps (in dependency order):
   1. filter_to_overlap_items_kcore.py   — k-core hist; filter future files to surviving items
-  2. detect_high_drift_users_overlap.py — score users by preference drift (needs overlap data)
-  3. filter_to_selected_users_kcore.py  — filter to high-drift users + re-apply k-core
-  4. build_final_drift_scores.py        — attach user indices to final drift scores
+  2. backbone/train_backbone.py         — train SASRec backbone on overlap-filtered hist
+  3. detect_high_drift_users_overlap.py — score users by preference drift (needs backbone + overlap data)
+  4. filter_to_selected_users_kcore.py  — filter to high-drift users + re-apply k-core
+  5. build_final_drift_scores.py        — attach user indices to final drift scores
 
 Usage:
 python data/preprocessing/run_pipeline.py \
@@ -54,10 +55,12 @@ def parse_args():
 
 
 def main():
-    args   = parse_args()
-    outdir = Path(args.output_dir)
+    args        = parse_args()
+    outdir      = Path(args.output_dir)
     outdir.mkdir(parents=True, exist_ok=True)
-    base   = Path(__file__).parent
+    base        = Path(__file__).parent
+    repo_root   = base.parent.parent
+    backbone_ckpt = Path(args.backbone_ckpt)
 
     min_int = str(args.min_interactions)
 
@@ -74,6 +77,15 @@ def main():
             outdir / "hist_overlap_items_kcore.csv",
         ),
         (
+            [sys.executable, str(repo_root / "backbone" / "train_backbone.py"),
+             "--hist_data",   str(outdir / "hist_overlap_items_kcore.csv"),
+             "--val_data",    str(outdir / "future_adapt_overlap_items_kcore.csv"),
+             "--output_dir",  str(backbone_ckpt.parent),
+             "--device",      args.device],
+            "Step 2: train backbone on overlap-filtered hist",
+            backbone_ckpt,
+        ),
+        (
             [sys.executable, str(base / "detect_high_drift_users_overlap.py"),
              "--checkpoint",  args.backbone_ckpt,
              "--hist_data",   str(outdir / "hist_overlap_items_kcore.csv"),
@@ -81,7 +93,7 @@ def main():
              "--outdir",      str(outdir),
              "--top_pct",     str(args.drift_top_pct),
              "--device",      args.device],
-            "Step 2: detect high-drift users",
+            "Step 3: detect high-drift users",
             outdir / "user_drift_scores_overlap.csv",
         ),
         (
@@ -93,7 +105,7 @@ def main():
              "--outdir",             str(outdir),
              "--user_min_len",       min_int,
              "--item_min_count",     min_int],
-            "Step 3: filter to high-drift users + re-apply k-core",
+            "Step 4: filter to high-drift users + re-apply k-core",
             outdir / "hist_high_drift_kcore.csv",
         ),
         (
@@ -102,7 +114,7 @@ def main():
              "--hist_high_drift",  str(outdir / "hist_high_drift_kcore.csv"),
              "--checkpoint",       args.backbone_ckpt,
              "--outdir",           str(outdir)],
-            "Step 4: build final drift scores",
+            "Step 5: build final drift scores",
             outdir / "user_drift_scores_final_subset.csv",
         ),
     ]
