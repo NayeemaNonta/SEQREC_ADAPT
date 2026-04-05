@@ -107,6 +107,8 @@ def parse_args():
     p.add_argument("--bottleneck_dim",      type=int,   default=8)
     p.add_argument("--adapter_dropout",     type=float, default=0.0)
     p.add_argument("--adapter_activation",  default="gelu")
+    p.add_argument("--no_gate",             action="store_true",
+                   help="Ablation: replace scalar gate with plain residual MLP (no gating)")
     p.add_argument("--lr",                  type=float, default=5e-4)
     p.add_argument("--weight_decay",        type=float, default=0.0)
     p.add_argument("--epochs",              type=int,   default=15)
@@ -140,7 +142,7 @@ def main():
     model = SASRecContextGateModel(
         backbone=backbone, bottleneck_dim=args.bottleneck_dim,
         adapter_dropout=args.adapter_dropout, adapter_activation=args.adapter_activation,
-        freeze_backbone=True,
+        freeze_backbone=True, use_gate=not args.no_gate,
     ).to(device)
 
     optimizer  = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],
@@ -187,6 +189,7 @@ def main():
         "bottleneck_dim":      int(args.bottleneck_dim),
         "adapter_dropout":     float(args.adapter_dropout),
         "adapter_activation":  args.adapter_activation,
+        "no_gate":             bool(args.no_gate),
         "backbone_config":     ckpt["config"],
         "itemnum":             int(itemnum),
         "source_checkpoint":   args.checkpoint,

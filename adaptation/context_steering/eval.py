@@ -60,6 +60,7 @@ def load_adapted(backbone_ckpt, adapt_ckpt, device):
         adapter_dropout=ack.get("adapter_dropout", 0.0),
         adapter_activation=ack.get("adapter_activation", "gelu"),
         freeze_backbone=True,
+        use_gate=not ack.get("no_gate", False),
     ).to(device)
     adapted.adapter.load_state_dict(ack["adapter_state_dict"])
     adapted.eval()

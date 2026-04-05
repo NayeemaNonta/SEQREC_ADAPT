@@ -402,7 +402,11 @@ class ContextGateAdapter(nn.Module):
 
 
 class SASRecContextGateModel(nn.Module):
-    """Frozen SASRec backbone + context-conditioned scalar gate adapter."""
+    """Frozen SASRec backbone + context-conditioned scalar gate adapter.
+
+    use_gate=True  → ContextGateAdapter:   h̃ = h + σ(Wh+b) · MLP(h)
+    use_gate=False → ResidualMLPAdapter:   h̃ = h + MLP(h)   (gate ablation)
+    """
 
     def __init__(
         self,
@@ -411,15 +415,25 @@ class SASRecContextGateModel(nn.Module):
         adapter_dropout: float = 0.0,
         adapter_activation: str = "gelu",
         freeze_backbone: bool = True,
+        use_gate: bool = True,
     ):
         super().__init__()
-        self.backbone = backbone
-        self.adapter = ContextGateAdapter(
-            hidden_dim=backbone.hidden_units,
-            bottleneck_dim=bottleneck_dim,
-            dropout=adapter_dropout,
-            activation=adapter_activation,
-        )
+        self.backbone  = backbone
+        self.use_gate  = use_gate
+        if use_gate:
+            self.adapter = ContextGateAdapter(
+                hidden_dim=backbone.hidden_units,
+                bottleneck_dim=bottleneck_dim,
+                dropout=adapter_dropout,
+                activation=adapter_activation,
+            )
+        else:
+            self.adapter = ResidualMLPAdapter(
+                hidden_dim=backbone.hidden_units,
+                bottleneck_dim=bottleneck_dim,
+                dropout=adapter_dropout,
+                activation=adapter_activation,
+            )
         if freeze_backbone:
             for p in backbone.parameters():
                 p.requires_grad_(False)
