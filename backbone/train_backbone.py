@@ -143,7 +143,7 @@ def parse_args():
     p.add_argument("--num_heads",   type=int,   default=2)
     p.add_argument("--dropout_rate",type=float, default=0.2)
     p.add_argument("--maxlen",      type=int,   default=128)
-    p.add_argument("--epochs",      type=int,   default=200)
+    p.add_argument("--epochs",      type=int,   default=5)
     p.add_argument("--batch_size",  type=int,   default=128)
     p.add_argument("--lr",          type=float, default=1e-3)
     p.add_argument("--weight_decay",type=float, default=0.0)

@@ -76,7 +76,7 @@ python data/preprocessing/run_pipeline.py \
   --hist_data         data/data_csv/splits/split_10M_contiguous/interactions_hist.csv \
   --future_adapt_data data/data_csv/splits/split_10M_contiguous/interactions_future_adapt.csv \
   --future_test_data  data/data_csv/splits/split_10M_contiguous/interactions_future_test.csv \
-  --backbone_ckpt     results/backbone/sasrec_backbone_best.pt \
+  --backbone_ckpt     results/backbone_contiguous/sasrec_backbone_best.pt \
   --output_dir        data/processed/split_10M_contiguous \
   --device cuda
 
@@ -85,7 +85,7 @@ python data/preprocessing/run_pipeline.py \
   --hist_data         data/data_csv/splits/split_10M_tail/interactions_hist.csv \
   --future_adapt_data data/data_csv/splits/split_10M_tail/interactions_future_adapt.csv \
   --future_test_data  data/data_csv/splits/split_10M_tail/interactions_future_test.csv \
-  --backbone_ckpt     results/backbone/sasrec_backbone_best.pt \
+  --backbone_ckpt     results/backbone_tail/sasrec_backbone_best.pt \
   --output_dir        data/processed/split_10M_tail \
   --device cuda
 ```
@@ -103,51 +103,64 @@ Outputs per split (in `data/processed/split_10M_*/`):
 
 ### 3. Train backbone (T1)
 
+The backbone is trained automatically as step 2 of the preprocessing pipeline above. The commands below are for re-training or fine-tuning independently:
+
 ```bash
+# Split A
 python backbone/train_backbone.py \
-  --hist_data  data/processed/split_10M_contiguous/hist_high_drift_kcore.csv \
-  --val_data   data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
-  --output_dir results/backbone --device cuda
+  --hist_data  data/processed/split_10M_contiguous/hist_overlap_items_kcore.csv \
+  --val_data   data/processed/split_10M_contiguous/future_adapt_overlap_items_kcore.csv \
+  --output_dir results/backbone_contiguous --device cuda
+
+# Split B
+python backbone/train_backbone.py \
+  --hist_data  data/processed/split_10M_tail/hist_overlap_items_kcore.csv \
+  --val_data   data/processed/split_10M_tail/future_adapt_overlap_items_kcore.csv \
+  --output_dir results/backbone_tail --device cuda
 ```
 
+Each split gets its own backbone because k-core filtering produces a different item vocabulary per split.
+
 ### 4. Adapt and evaluate
+
+Example using split A (contiguous). Replace `_contiguous` → `_tail` and `backbone_contiguous` → `backbone_tail` for split B.
 
 ```bash
 # Last-block fine-tuning
 python adaptation/last_block/train.py \
-  --checkpoint results/backbone/sasrec_backbone_best.pt \
+  --checkpoint results/backbone_contiguous/sasrec_backbone_best.pt \
   --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
-  --output_dir results/last_block --device cuda
+  --output_dir results/last_block_contiguous --device cuda
 
 python adaptation/last_block/eval.py \
-  --checkpoint    results/backbone/sasrec_backbone_best.pt \
-  --ft_checkpoint results/last_block/last_block_best.pt \
+  --checkpoint    results/backbone_contiguous/sasrec_backbone_best.pt \
+  --ft_checkpoint results/last_block_contiguous/last_block_best.pt \
   --test_data     data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
-  --outdir        results/last_block/eval
+  --outdir        results/last_block_contiguous/eval
 
 # Context gate adapter
 python adaptation/context_steering/train.py \
-  --checkpoint results/backbone/sasrec_backbone_best.pt \
+  --checkpoint results/backbone_contiguous/sasrec_backbone_best.pt \
   --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
-  --output_dir results/context_gate --device cuda
+  --output_dir results/context_gate_contiguous --device cuda
 
 python adaptation/context_steering/eval.py \
-  --checkpoint       results/backbone/sasrec_backbone_best.pt \
-  --adapt_checkpoint results/context_gate/context_gate_best.pt \
+  --checkpoint       results/backbone_contiguous/sasrec_backbone_best.pt \
+  --adapt_checkpoint results/context_gate_contiguous/context_gate_best.pt \
   --test_data        data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
-  --outdir           results/context_gate/eval
+  --outdir           results/context_gate_contiguous/eval
 
 # Prototype steering
 python adaptation/prototype_steering/train.py \
-  --checkpoint results/backbone/sasrec_backbone_best.pt \
+  --checkpoint results/backbone_contiguous/sasrec_backbone_best.pt \
   --adapt_data data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
-  --output_dir results/prototype_steering --device cuda
+  --output_dir results/prototype_steering_contiguous --device cuda
 
 python adaptation/prototype_steering/eval.py \
-  --checkpoint       results/backbone/sasrec_backbone_best.pt \
-  --adapt_checkpoint results/prototype_steering/prototype_steering_best.pt \
+  --checkpoint       results/backbone_contiguous/sasrec_backbone_best.pt \
+  --adapt_checkpoint results/prototype_steering_contiguous/prototype_steering_best.pt \
   --test_data        data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
-  --outdir           results/prototype_steering/eval
+  --outdir           results/prototype_steering_contiguous/eval
 ```
 
 ### 5. Hyperparameter sweeps
@@ -156,10 +169,10 @@ Each adaptation mode has a `sweep.py` that runs a full grid search and writes re
 
 ```bash
 python adaptation/last_block/sweep.py \
-  --checkpoint  results/backbone/sasrec_backbone_best.pt \
+  --checkpoint  results/backbone_contiguous/sasrec_backbone_best.pt \
   --adapt_data  data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
   --test_data   data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
-  --base_outdir results/sweep_last_block --device cuda
+  --base_outdir results/sweep_last_block_contiguous --device cuda
 ```
 
 ## Evaluation Protocol
