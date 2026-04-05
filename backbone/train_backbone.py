@@ -148,7 +148,7 @@ def parse_args():
     p.add_argument("--lr",          type=float, default=1e-3)
     p.add_argument("--weight_decay",type=float, default=0.0)
     p.add_argument("--patience",    type=int,   default=20)
-    p.add_argument("--eval_every",  type=int,   default=5)
+    p.add_argument("--eval_every",  type=int,   default=1)
     p.add_argument("--num_neg_eval",type=int,   default=100)
     p.add_argument("--seed",        type=int,   default=42)
     p.add_argument("--device",      type=str,   default="cuda" if torch.cuda.is_available() else "cpu")
