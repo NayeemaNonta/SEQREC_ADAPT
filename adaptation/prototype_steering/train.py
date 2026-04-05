@@ -7,13 +7,16 @@ Backbone is fully frozen; each cluster learns an independent residual:
 
   h̃_{z_u} = h + f_{ϕ_{z_u}}(h)    z_u ∈ {0, …, K-1}
 
-Requires a pre-computed cluster assignment CSV with columns [user_id, cluster_id].
+Cluster assignments are read from --cluster_csv (columns: user_id, cluster_id).
+If --cluster_csv is omitted or the file does not exist, clustering is run
+automatically using user_drift_scores_final_subset.csv from the same directory
+as --adapt_data, and the result is cached at:
+  <adapt_data_dir>/user_clusters_K<num_clusters>.csv
 
 Usage:
 python adaptation/prototype_steering/train.py \
   --checkpoint   results/backbone/sasrec_backbone_best.pt \
-  --adapt_data   data/processed/future_adapt.csv \
-  --cluster_csv  data/processed/user_clusters.csv \
+  --adapt_data   data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
   --output_dir   results/prototype_steering \
   --num_clusters 5 --bottleneck_dim 32 --device cuda
 """
@@ -41,6 +44,8 @@ from common.logging.logger import ExperimentLogger
 
 import pandas as pd
 import random
+
+from adaptation.prototype_steering.cluster_users import cluster_users
 
 
 def set_seed(seed):
@@ -149,12 +154,46 @@ def eval_bce(backbone, adapter, loader, device):
 # CLI
 # ---------------------------------------------------------------------------
 
+def resolve_cluster_csv(cluster_csv: str | None, adapt_data: str, num_clusters: int, seed: int) -> str:
+    """
+    Return path to a valid cluster CSV. If cluster_csv is not provided or the
+    file does not exist, auto-generate it from user_drift_scores_final_subset.csv
+    located in the same directory as adapt_data.
+    """
+    if cluster_csv and Path(cluster_csv).exists():
+        return cluster_csv
+
+    adapt_dir = Path(adapt_data).parent
+    auto_path = adapt_dir / f"user_clusters_K{num_clusters}.csv"
+
+    if auto_path.exists():
+        print(f"[cluster] using cached cluster CSV: {auto_path}")
+        return str(auto_path)
+
+    drift_scores = adapt_dir / "user_drift_scores_final_subset.csv"
+    if not drift_scores.exists():
+        raise FileNotFoundError(
+            f"Cannot auto-generate cluster CSV: drift scores not found at {drift_scores}\n"
+            f"Either provide --cluster_csv explicitly or run the preprocessing pipeline first."
+        )
+
+    print(f"[cluster] cluster CSV not found — running clustering (K={num_clusters}) ...")
+    return cluster_users(
+        drift_scores_csv=str(drift_scores),
+        num_clusters=num_clusters,
+        outdir=str(adapt_dir),
+        seed=seed,
+    )
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--checkpoint",    required=True)
     p.add_argument("--adapt_data",    required=True)
-    p.add_argument("--cluster_csv",   required=True,
-                   help="CSV with columns [user_id, cluster_id]")
+    p.add_argument("--cluster_csv",   default=None,
+                   help="CSV with columns [user_id, cluster_id]. "
+                        "If omitted, auto-generated from user_drift_scores_final_subset.csv "
+                        "in the adapt_data directory and cached as user_clusters_K<K>.csv.")
     p.add_argument("--output_dir",    required=True)
     p.add_argument("--device",        default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--num_clusters",  type=int,   default=5)
@@ -190,7 +229,10 @@ def main():
     backbone.eval()
 
     # cluster map: user_id (str) → cluster_id (int)
-    cdf = pd.read_csv(args.cluster_csv)
+    cluster_csv_path = resolve_cluster_csv(
+        args.cluster_csv, args.adapt_data, args.num_clusters, args.seed
+    )
+    cdf = pd.read_csv(cluster_csv_path)
     cdf["user_id"] = cdf["user_id"].astype(str)
     known_users = set(le_user.classes_.tolist())
     cdf = cdf[cdf["user_id"].isin(known_users)]

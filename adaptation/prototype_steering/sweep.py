@@ -7,11 +7,14 @@ Grid search over prototype-steering hyperparameters.
 Usage:
 python adaptation/prototype_steering/sweep.py \
   --checkpoint   results/backbone/sasrec_backbone_best.pt \
-  --adapt_data   data/processed/future_adapt.csv \
-  --cluster_csv  data/processed/user_clusters.csv \
-  --test_data    data/processed/future_test.csv \
-  --base_outdir  results/sweep_prototype \
+  --adapt_data   data/processed/split_10M_contiguous/future_adapt_high_drift_kcore.csv \
+  --test_data    data/processed/split_10M_contiguous/future_test_high_drift_kcore.csv \
+  --base_outdir  results/sweep_prototype_steering_contiguous \
   --device cuda
+
+--cluster_csv is optional. If omitted, per-K cluster CSVs are auto-generated from
+user_drift_scores_final_subset.csv in the adapt_data directory and cached as
+user_clusters_K<K>.csv so each unique K is only clustered once.
 """
 
 import argparse
@@ -44,7 +47,10 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--checkpoint",   required=True)
     p.add_argument("--adapt_data",   required=True)
-    p.add_argument("--cluster_csv",  required=True)
+    p.add_argument("--cluster_csv",  default=None,
+                   help="CSV with columns [user_id, cluster_id]. "
+                        "If omitted, train.py auto-generates per-K cluster CSVs from "
+                        "user_drift_scores_final_subset.csv in the adapt_data directory.")
     p.add_argument("--test_data",    required=True)
     p.add_argument("--base_outdir",  required=True)
     p.add_argument("--device",       default="cuda")
@@ -71,11 +77,21 @@ def main():
 
         print(f"\n{'='*60}\n[sweep] {run_id}/{total}: {name}\n{'='*60}")
 
+        # Resolve the cluster CSV for this K value.
+        # If --cluster_csv was not provided, train.py will auto-generate it at
+        # <adapt_data_dir>/user_clusters_K<K>.csv — use that same path for eval.
+        if args.cluster_csv:
+            run_cluster_csv = args.cluster_csv
+        else:
+            run_cluster_csv = str(
+                Path(args.adapt_data).parent / f"user_clusters_K{cfg['num_clusters']}.csv"
+            )
+
         train_cmd = [
             sys.executable, "adaptation/prototype_steering/train.py",
             "--checkpoint",    args.checkpoint,
             "--adapt_data",    args.adapt_data,
-            "--cluster_csv",   args.cluster_csv,
+            "--cluster_csv",   run_cluster_csv,
             "--output_dir",    str(run_dir),
             "--device",        args.device,
             "--num_clusters",  str(cfg["num_clusters"]),
@@ -95,7 +111,7 @@ def main():
             sys.executable, "adaptation/prototype_steering/eval.py",
             "--checkpoint",       args.checkpoint,
             "--adapt_checkpoint", str(adapt_ckpt),
-            "--cluster_csv",      args.cluster_csv,
+            "--cluster_csv",      run_cluster_csv,
             "--test_data",        args.test_data,
             "--outdir",           str(ev_dir),
             "--device",           args.device,
