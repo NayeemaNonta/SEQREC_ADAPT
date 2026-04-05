@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
@@ -108,7 +109,7 @@ def ranking_eval(model, test_seqs, le_user, le_item, cfg, itemnum, device, num_n
         rank   = int((logits > logits[0]).sum().item())
         rows.append({"user_idx": int(user), "rank": rank, **metrics_from_rank(rank)})
     print(f"[full_ft] eval: {len(users):,} users  skipped (seq<2): {skipped}")
-    return summarize(rows), rows
+    return summarize(pd.DataFrame(rows)), rows
 
 
 # ---------------------------------------------------------------------------
