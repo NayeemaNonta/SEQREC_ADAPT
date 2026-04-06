@@ -29,6 +29,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
@@ -89,34 +90,25 @@ class PrototypeAdapter(nn.Module):
 # ---------------------------------------------------------------------------
 
 class AdaptDataset(Dataset):
-    def __init__(self, user_seqs: dict, cluster_map: dict, itemnum: int,
-                 maxlen: int, num_neg: int = 10):
-        self.itemnum = itemnum
-        self.maxlen  = maxlen
-        self.num_neg = num_neg
+    """One (input_ids, target, cluster_id) per (user, position) — full-vocab CE."""
+
+    def __init__(self, user_seqs: dict, cluster_map: dict, maxlen: int):
+        self.maxlen   = maxlen
         self.examples = []
         for u, seq in user_seqs.items():
             if u not in cluster_map:
                 continue
             c = cluster_map[u]
             for t in range(1, len(seq)):
-                self.examples.append((seq[:t], seq[t], set(seq), c))
+                self.examples.append((seq[:t], seq[t] - 1, c))  # target 0-indexed
 
     def __len__(self): return len(self.examples)
 
-    def _neg(self, seen, pos):
-        negs = []
-        while len(negs) < self.num_neg:
-            n = random.randint(1, self.itemnum)
-            if n != pos and n not in seen: negs.append(n)
-        return negs
-
     def __getitem__(self, idx):
-        prefix, pos, seen, c = self.examples[idx]
+        prefix, target, c = self.examples[idx]
         return {
             "input_ids":  torch.tensor(pad_sequence(prefix, self.maxlen), dtype=torch.long),
-            "pos_item":   torch.tensor(pos, dtype=torch.long),
-            "neg_items":  torch.tensor(self._neg(seen, pos), dtype=torch.long),
+            "target":     torch.tensor(target, dtype=torch.long),
             "cluster_id": torch.tensor(c, dtype=torch.long),
         }
 
@@ -125,25 +117,22 @@ class AdaptDataset(Dataset):
 # Loss / eval
 # ---------------------------------------------------------------------------
 
-def bce_loss(backbone, adapter, input_ids, pos_item, neg_items, cluster_ids):
-    with torch.no_grad():
-        h = backbone.get_last_hidden(input_ids)
-    h_tilde = adapter(h, cluster_ids)
-    pos_logits = backbone.score_from_hidden(h_tilde, pos_item.unsqueeze(1)).squeeze(1)
-    neg_logits = backbone.score_from_hidden(h_tilde, neg_items)
-    return (-torch.log(torch.sigmoid(pos_logits) + 1e-24).mean()
-            - torch.log(1.0 - torch.sigmoid(neg_logits) + 1e-24).mean())
+def ce_loss(backbone, adapter, input_ids, target, cluster_ids):
+    h = backbone.get_last_hidden(input_ids)           # (B, d)  backbone frozen
+    h_tilde = adapter(h, cluster_ids)                 # (B, d)
+    logits = backbone.score_from_hidden(h_tilde)[:, 1:]  # (B, itemnum) drop pad col
+    return F.cross_entropy(logits, target)
 
 
 @torch.no_grad()
-def eval_bce(backbone, adapter, loader, device):
+def eval_ce(backbone, adapter, loader, device):
     adapter.eval()
     total, steps = 0.0, 0
     for b in loader:
-        total += bce_loss(
+        total += ce_loss(
             backbone, adapter,
-            b["input_ids"].to(device), b["pos_item"].to(device),
-            b["neg_items"].to(device), b["cluster_id"].to(device),
+            b["input_ids"].to(device), b["target"].to(device),
+            b["cluster_id"].to(device),
         ).item()
         steps += 1
     adapter.train()
@@ -200,10 +189,10 @@ def parse_args():
     p.add_argument("--bottleneck_dim",type=int,   default=32)
     p.add_argument("--lr",            type=float, default=1e-3)
     p.add_argument("--weight_decay",  type=float, default=0.0)
-    p.add_argument("--epochs",        type=int,   default=20)
-    p.add_argument("--batch_size",    type=int,   default=256)
-    p.add_argument("--num_neg_train", type=int,   default=10)
-    p.add_argument("--seed",          type=int,   default=42)
+    p.add_argument("--epochs",         type=int,   default=20)
+    p.add_argument("--batch_size",     type=int,   default=256)
+    p.add_argument("--eval_batch_size",type=int,   default=512)
+    p.add_argument("--seed",           type=int,   default=42)
     return p.parse_args()
 
 
@@ -242,14 +231,16 @@ def main():
     adapt_seqs = build_sequences_by_user(adapt_enc)
     maxlen     = cfg["maxlen"]
 
-    ds      = AdaptDataset(adapt_seqs, user_to_cluster, ckpt["itemnum"], maxlen, args.num_neg_train)
-    loader  = DataLoader(ds, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+    train_ds    = AdaptDataset(adapt_seqs, user_to_cluster, maxlen)
+    eval_ds     = AdaptDataset(adapt_seqs, user_to_cluster, maxlen)
+    loader      = DataLoader(train_ds, batch_size=args.batch_size,      shuffle=True,  num_workers=0, pin_memory=True)
+    eval_loader = DataLoader(eval_ds,  batch_size=args.eval_batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
     adapter   = PrototypeAdapter(args.num_clusters, cfg["hidden_units"], args.bottleneck_dim).to(device)
     optimizer = torch.optim.Adam(adapter.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     trainable = sum(p.numel() for p in adapter.parameters())
 
-    print(f"[prototype] train examples={len(ds)}  clusters={args.num_clusters}"
+    print(f"[prototype] train examples={len(train_ds)}  clusters={args.num_clusters}"
           f"  trainable params={trainable:,}")
 
     mem = MemoryProfiler(); mem.reset()
@@ -265,22 +256,24 @@ def main():
         pbar = tqdm(loader, desc=f"Epoch {epoch:03d}", leave=False, dynamic_ncols=True)
         for batch in pbar:
             optimizer.zero_grad()
-            loss = bce_loss(backbone, adapter,
-                            batch["input_ids"].to(device), batch["pos_item"].to(device),
-                            batch["neg_items"].to(device), batch["cluster_id"].to(device))
+            loss = ce_loss(backbone, adapter,
+                           batch["input_ids"].to(device), batch["target"].to(device),
+                           batch["cluster_id"].to(device))
             loss.backward(); optimizer.step()
             running += loss.item(); steps += 1
             pbar.set_postfix(loss=f"{running/steps:.4f}")
 
-        avg = running / max(steps, 1)
-        logger.log_epoch({"epoch": epoch, "train_loss": float(avg),
-                          "epoch_time_s": round(time.time()-t0, 2)})
-        print(f"Epoch {epoch:03d} | train_loss={avg:.4f} | time={time.time()-t0:.1f}s")
+        avg_train = running / max(steps, 1)
+        avg_eval  = eval_ce(backbone, adapter, eval_loader, device)
+        epoch_time = time.time() - t0
+        logger.log_epoch({"epoch": epoch, "train_loss": float(avg_train),
+                          "eval_loss": float(avg_eval), "epoch_time_s": round(epoch_time, 2)})
+        print(f"Epoch {epoch:03d} | train_loss={avg_train:.4f} | eval_loss={avg_eval:.4f} | time={epoch_time:.1f}s")
 
-        if avg < best_loss:
-            best_loss  = avg
+        if avg_eval < best_loss:
+            best_loss  = avg_eval
             best_state = {k: v.detach().cpu().clone() for k, v in adapter.state_dict().items()}
-            print(f"[prototype] new best at epoch {epoch}")
+            print(f"[prototype] new best at epoch {epoch} (eval_loss={best_loss:.4f})")
 
     print(f"[prototype] total wall time: {timer.elapsed():.1f}s  {mem.report()}")
     logger.save_history()

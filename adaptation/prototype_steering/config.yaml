@@ -9,7 +9,7 @@ training:
   weight_decay: 0.0
   epochs: 20
   batch_size: 256
-  num_neg_train: 10
+  eval_batch_size: 512
   seed: 42
 
 evaluation:
