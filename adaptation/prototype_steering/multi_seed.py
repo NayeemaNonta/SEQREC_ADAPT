@@ -62,8 +62,13 @@ def parse_args():
     p.add_argument("--cluster_csv",  default=None,
                    help="Pre-computed cluster CSV. If omitted, auto-generated from "
                         "user_drift_scores_final_subset.csv in the adapt_data directory.")
-    p.add_argument("--seeds",        type=int, nargs="+", default=SEEDS,
+    p.add_argument("--seeds",          type=int, nargs="+", default=SEEDS,
                    help="Seeds to run (default: 0–9)")
+    # HP overrides — default to BEST dict above
+    p.add_argument("--num_clusters",   type=int,   default=BEST["num_clusters"])
+    p.add_argument("--bottleneck_dim", type=int,   default=BEST["bottleneck_dim"])
+    p.add_argument("--lr",             type=float, default=BEST["lr"])
+    p.add_argument("--epochs",         type=int,   default=BEST["epochs"])
     return p.parse_args()
 
 
@@ -93,10 +98,14 @@ def main():
     base_out.mkdir(parents=True, exist_ok=True)
     sweep_log = SweepLogger(base_out, CSV_COLUMNS)
 
-    seeds        = args.seeds
-    cluster_csv  = _cluster_csv_for(args.adapt_data, BEST["num_clusters"], args.cluster_csv)
+    cfg = {
+        "num_clusters": args.num_clusters, "bottleneck_dim": args.bottleneck_dim,
+        "lr": args.lr, "epochs": args.epochs,
+    }
+    seeds       = args.seeds
+    cluster_csv = _cluster_csv_for(args.adapt_data, cfg["num_clusters"], args.cluster_csv)
 
-    print(f"[multi_seed] prototype_steering | {len(seeds)} seeds | best config: {BEST}")
+    print(f"[multi_seed] prototype_steering | {len(seeds)} seeds | config: {cfg}")
     print(f"[multi_seed] cluster_csv: {cluster_csv}")
     print(f"[multi_seed] output → {sweep_log.path}\n")
 
@@ -114,10 +123,10 @@ def main():
             "--cluster_csv",   cluster_csv,
             "--output_dir",    str(run_dir),
             "--device",        args.device,
-            "--num_clusters",  str(BEST["num_clusters"]),
-            "--bottleneck_dim",str(BEST["bottleneck_dim"]),
-            "--lr",            str(BEST["lr"]),
-            "--epochs",        str(BEST["epochs"]),
+            "--num_clusters",  str(cfg["num_clusters"]),
+            "--bottleneck_dim",str(cfg["bottleneck_dim"]),
+            "--lr",            str(cfg["lr"]),
+            "--epochs",        str(cfg["epochs"]),
             "--seed",          str(seed),
         ]
         if not run_cmd(train_cmd, "TRAIN"):

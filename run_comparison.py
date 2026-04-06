@@ -37,60 +37,120 @@ from pathlib import Path
 # Best configs (from HP sweeps)
 # ---------------------------------------------------------------------------
 
-CONFIGS = [
-    {
-        "name":        "Full FT",
-        "script":      "backbone/finetune_full.py",
-        "extra_args":  ["--lr", "1e-4", "--epochs", "20", "--weight_decay", "1e-4"],
-        "run_dir":     "full_ft",
-        "ckpt_name":   None,           # no separate adapt ckpt; script does eval itself
-        "eval_script": None,
-        "summary_key": "finetuned_metrics",
-    },
-    {
-        "name":        "Last Block FT",
-        "script":      "adaptation/last_block/train.py",
-        "extra_args":  ["--lr", "5e-4", "--epochs", "50",
-                        "--weight_decay", "1e-4", "--include_last_layernorm"],
-        "run_dir":     "last_block",
-        "ckpt_name":   "last_block_best.pt",
-        "eval_script": "adaptation/last_block/eval.py",
-        "eval_flag":   "--ft_checkpoint",
-        "summary_key": "finetuned_metrics",
-    },
-    {
-        "name":        "Context Gate",
-        "script":      "adaptation/context_steering/train.py",
-        "extra_args":  ["--bottleneck_dim", "8", "--lr", "5e-4", "--epochs", "10"],
-        "run_dir":     "context_gate",
-        "ckpt_name":   "context_gate_best.pt",
-        "eval_script": "adaptation/context_steering/eval.py",
-        "eval_flag":   "--adapt_checkpoint",
-        "summary_key": "adapted_metrics",
-    },
-    {
-        "name":        "Context Gate (no gate)",
-        "script":      "adaptation/context_steering/train.py",
-        "extra_args":  ["--bottleneck_dim", "8", "--lr", "5e-4", "--epochs", "10", "--no_gate"],
-        "run_dir":     "context_gate_no_gate",
-        "ckpt_name":   "context_gate_best.pt",
-        "eval_script": "adaptation/context_steering/eval.py",
-        "eval_flag":   "--adapt_checkpoint",
-        "summary_key": "adapted_metrics",
-    },
-    {
-        "name":        "Prototype Steering",
-        "script":      "adaptation/prototype_steering/train.py",
-        "extra_args":  ["--num_clusters", "5", "--bottleneck_dim", "32",
-                        "--lr", "1e-3", "--epochs", "20"],
-        "run_dir":     "prototype_steering",
-        "ckpt_name":   "prototype_best.pt",
-        "eval_script": "adaptation/prototype_steering/eval.py",
-        "eval_flag":   "--adapt_checkpoint",
-        "summary_key": "adapted_metrics",
-        "needs_cluster_csv": True,
-    },
-]
+# Best configs per temporal split (from HP sweeps)
+CONFIGS_BY_SPLIT = {
+    "contiguous": [
+        {
+            "name":        "Full FT",
+            "script":      "backbone/finetune_full.py",
+            "extra_args":  ["--lr", "1e-4", "--epochs", "20", "--weight_decay", "1e-4"],
+            "run_dir":     "full_ft",
+            "ckpt_name":   None,
+            "eval_script": None,
+            "summary_key": "finetuned_metrics",
+        },
+        {
+            "name":        "Last Block FT",
+            "script":      "adaptation/last_block/train.py",
+            "extra_args":  ["--lr", "5e-4", "--epochs", "50",
+                            "--weight_decay", "0.0", "--include_last_layernorm"],
+            "run_dir":     "last_block",
+            "ckpt_name":   "last_block_best.pt",
+            "eval_script": "adaptation/last_block/eval.py",
+            "eval_flag":   "--ft_checkpoint",
+            "summary_key": "finetuned_metrics",
+        },
+        {
+            "name":        "Context Gate",
+            "script":      "adaptation/context_steering/train.py",
+            "extra_args":  ["--bottleneck_dim", "8", "--lr", "5e-4", "--epochs", "10"],
+            "run_dir":     "context_gate",
+            "ckpt_name":   "context_gate_best.pt",
+            "eval_script": "adaptation/context_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+        },
+        {
+            "name":        "Context Gate (no gate)",
+            "script":      "adaptation/context_steering/train.py",
+            "extra_args":  ["--bottleneck_dim", "8", "--lr", "5e-4", "--epochs", "10", "--no_gate"],
+            "run_dir":     "context_gate_no_gate",
+            "ckpt_name":   "context_gate_best.pt",
+            "eval_script": "adaptation/context_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+        },
+        {
+            "name":        "Prototype Steering",
+            "script":      "adaptation/prototype_steering/train.py",
+            "extra_args":  ["--num_clusters", "1", "--bottleneck_dim", "16",
+                            "--lr", "5e-4", "--epochs", "20"],
+            "run_dir":     "prototype_steering",
+            "ckpt_name":   "prototype_best.pt",
+            "eval_script": "adaptation/prototype_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+            "needs_cluster_csv": True,
+        },
+    ],
+    "tail": [
+        {
+            "name":        "Full FT",
+            "script":      "backbone/finetune_full.py",
+            "extra_args":  ["--lr", "1e-4", "--epochs", "20", "--weight_decay", "1e-4"],
+            "run_dir":     "full_ft",
+            "ckpt_name":   None,
+            "eval_script": None,
+            "summary_key": "finetuned_metrics",
+        },
+        {
+            "name":        "Last Block FT",
+            "script":      "adaptation/last_block/train.py",
+            "extra_args":  ["--lr", "1e-3", "--epochs", "50",
+                            "--weight_decay", "1e-4", "--include_last_layernorm"],
+            "run_dir":     "last_block",
+            "ckpt_name":   "last_block_best.pt",
+            "eval_script": "adaptation/last_block/eval.py",
+            "eval_flag":   "--ft_checkpoint",
+            "summary_key": "finetuned_metrics",
+        },
+        {
+            "name":        "Context Gate",
+            "script":      "adaptation/context_steering/train.py",
+            "extra_args":  ["--bottleneck_dim", "32", "--lr", "1e-3", "--epochs", "20"],
+            "run_dir":     "context_gate",
+            "ckpt_name":   "context_gate_best.pt",
+            "eval_script": "adaptation/context_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+        },
+        {
+            "name":        "Context Gate (no gate)",
+            "script":      "adaptation/context_steering/train.py",
+            "extra_args":  ["--bottleneck_dim", "32", "--lr", "1e-3", "--epochs", "20", "--no_gate"],
+            "run_dir":     "context_gate_no_gate",
+            "ckpt_name":   "context_gate_best.pt",
+            "eval_script": "adaptation/context_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+        },
+        {
+            "name":        "Prototype Steering",
+            "script":      "adaptation/prototype_steering/train.py",
+            "extra_args":  ["--num_clusters", "5", "--bottleneck_dim", "64",
+                            "--lr", "1e-3", "--epochs", "20"],
+            "run_dir":     "prototype_steering",
+            "ckpt_name":   "prototype_best.pt",
+            "eval_script": "adaptation/prototype_steering/eval.py",
+            "eval_flag":   "--adapt_checkpoint",
+            "summary_key": "adapted_metrics",
+            "needs_cluster_csv": True,
+        },
+    ],
+}
+
+# kept for backward compatibility — resolved in main() based on --split
+CONFIGS = CONFIGS_BY_SPLIT["contiguous"]
 
 REPORT_METRICS = ["ndcg@10", "hr@10", "mrr@10", "ndcg@20", "hr@20"]
 
@@ -250,6 +310,9 @@ def parse_args():
                         "If omitted, auto-derived from adapt_data directory.")
     p.add_argument("--skip",         nargs="*", default=[],
                    help="Method run_dirs to skip, e.g. --skip full_ft prototype_steering")
+    p.add_argument("--split",        choices=["contiguous", "tail"], default=None,
+                   help="Select split-specific best HP configs. "
+                        "If omitted, falls back to the generic CONFIGS list.")
     return p.parse_args()
 
 
@@ -258,10 +321,14 @@ def main():
     outdir  = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
+    configs = CONFIGS_BY_SPLIT[args.split] if args.split else CONFIGS
+    if args.split:
+        print(f"[comparison] using split-specific configs for: {args.split}")
+
     cluster_csv = args.cluster_csv or cluster_csv_for(args.adapt_data)
     rows = []
 
-    for cfg in CONFIGS:
+    for cfg in configs:
         if cfg["run_dir"] in args.skip:
             print(f"\n[comparison] SKIPPING {cfg['name']}")
             continue
@@ -342,7 +409,7 @@ def main():
 
     print_table(rows)
     save_table(rows, outdir)
-    print(f"\n[comparison] DONE — {len(rows)}/{len(CONFIGS)} methods completed")
+    print(f"\n[comparison] DONE — {len(rows)}/{len(configs)} methods completed")
 
 
 if __name__ == "__main__":

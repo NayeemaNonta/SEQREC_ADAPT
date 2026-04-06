@@ -56,9 +56,13 @@ def parse_args():
     p.add_argument("--test_data",    required=True)
     p.add_argument("--base_outdir",  required=True)
     p.add_argument("--device",       default="cuda")
-    p.add_argument("--num_neg_eval", type=int, default=100)
-    p.add_argument("--seeds",        type=int, nargs="+", default=SEEDS,
+    p.add_argument("--num_neg_eval",  type=int,   default=100)
+    p.add_argument("--seeds",         type=int, nargs="+", default=SEEDS,
                    help="Seeds to run (default: 0–9)")
+    # HP overrides — default to BEST dict above
+    p.add_argument("--bottleneck_dim", type=int,   default=BEST["bottleneck_dim"])
+    p.add_argument("--lr",             type=float, default=BEST["lr"])
+    p.add_argument("--epochs",         type=int,   default=BEST["epochs"])
     return p.parse_args()
 
 
@@ -81,8 +85,9 @@ def main():
     base_out.mkdir(parents=True, exist_ok=True)
     sweep_log = SweepLogger(base_out, CSV_COLUMNS)
 
+    cfg   = {"bottleneck_dim": args.bottleneck_dim, "lr": args.lr, "epochs": args.epochs}
     seeds = args.seeds
-    print(f"[multi_seed] context_gate | {len(seeds)} seeds | best config: {BEST}")
+    print(f"[multi_seed] context_gate | {len(seeds)} seeds | config: {cfg}")
     print(f"[multi_seed] output → {sweep_log.path}\n")
 
     for seed in seeds:
@@ -98,9 +103,9 @@ def main():
             "--adapt_data",    args.adapt_data,
             "--output_dir",    str(run_dir),
             "--device",        args.device,
-            "--bottleneck_dim",str(BEST["bottleneck_dim"]),
-            "--lr",            str(BEST["lr"]),
-            "--epochs",        str(BEST["epochs"]),
+            "--bottleneck_dim",str(cfg["bottleneck_dim"]),
+            "--lr",            str(cfg["lr"]),
+            "--epochs",        str(cfg["epochs"]),
             "--seed",          str(seed),
         ]
         if not run_cmd(train_cmd, "TRAIN"):

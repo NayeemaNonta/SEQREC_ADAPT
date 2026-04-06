@@ -57,9 +57,15 @@ def parse_args():
     p.add_argument("--test_data",    required=True)
     p.add_argument("--base_outdir",  required=True)
     p.add_argument("--device",       default="cuda")
-    p.add_argument("--num_neg_eval", type=int, default=100)
-    p.add_argument("--seeds",        type=int, nargs="+", default=SEEDS,
+    p.add_argument("--num_neg_eval",          type=int,   default=100)
+    p.add_argument("--seeds",                 type=int, nargs="+", default=SEEDS,
                    help="Seeds to run (default: 0–9)")
+    # HP overrides — default to BEST dict above
+    p.add_argument("--lr",                    type=float, default=BEST["lr"])
+    p.add_argument("--epochs",                type=int,   default=BEST["epochs"])
+    p.add_argument("--weight_decay",          type=float, default=BEST["weight_decay"])
+    p.add_argument("--include_last_layernorm",action="store_true",
+                   default=BEST["include_last_layernorm"])
     return p.parse_args()
 
 
@@ -82,8 +88,13 @@ def main():
     base_out.mkdir(parents=True, exist_ok=True)
     sweep_log = SweepLogger(base_out, CSV_COLUMNS)
 
+    cfg = {
+        "lr": args.lr, "epochs": args.epochs,
+        "weight_decay": args.weight_decay,
+        "include_last_layernorm": args.include_last_layernorm,
+    }
     seeds = args.seeds
-    print(f"[multi_seed] last_block | {len(seeds)} seeds | best config: {BEST}")
+    print(f"[multi_seed] last_block | {len(seeds)} seeds | config: {cfg}")
     print(f"[multi_seed] output → {sweep_log.path}\n")
 
     for seed in seeds:
@@ -99,12 +110,12 @@ def main():
             "--adapt_data",  args.adapt_data,
             "--output_dir",  str(run_dir),
             "--device",      args.device,
-            "--lr",          str(BEST["lr"]),
-            "--epochs",      str(BEST["epochs"]),
-            "--weight_decay",str(BEST["weight_decay"]),
+            "--lr",          str(cfg["lr"]),
+            "--epochs",      str(cfg["epochs"]),
+            "--weight_decay",str(cfg["weight_decay"]),
             "--seed",        str(seed),
         ]
-        if BEST["include_last_layernorm"]:
+        if cfg["include_last_layernorm"]:
             train_cmd.append("--include_last_layernorm")
 
         if not run_cmd(train_cmd, "TRAIN"):
