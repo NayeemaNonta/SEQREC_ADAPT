@@ -47,6 +47,8 @@ def parse_args():
     p.add_argument("--device",       default="cuda")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_neg_eval", type=int, default=100)
+    p.add_argument("--skip_existing", action="store_true",
+                   help="Skip any run whose eval summary.json already exists.")
     return p.parse_args()
 
 
@@ -65,6 +67,10 @@ def main():
         name    = f"run{run_id:03d}_bd{cfg['bottleneck_dim']}_lr{cfg['lr']}_ep{cfg['epochs']}"
         run_dir = base_out / name
         ev_dir  = base_out / f"{name}_eval"
+
+        if args.skip_existing and (ev_dir / "summary.json").exists():
+            print(f"[sweep] SKIP (already done): {name}")
+            continue
 
         print(f"\n{'='*60}\n[sweep] {run_id}/{total}: {name}\n{'='*60}")
 

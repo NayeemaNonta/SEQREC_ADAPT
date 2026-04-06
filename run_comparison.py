@@ -130,6 +130,12 @@ def parse_wall_time(output: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
+def parse_trainable_params(output: str) -> int | None:
+    """Extract trainable param count from stdout: 'trainable params=8,448'"""
+    m = re.search(r"trainable params[=:]\s*([\d,]+)", output)
+    return int(m.group(1).replace(",", "")) if m else None
+
+
 def load_summary(path: Path) -> dict | None:
     if not path.exists():
         print(f"  [warning] summary not found: {path}")
@@ -150,14 +156,21 @@ def count_params(summary: dict) -> int | None:
 # Table formatting
 # ---------------------------------------------------------------------------
 
-def build_row(cfg: dict, summary: dict, peak_mem: float | None, wall_time: float | None) -> dict:
+def build_row(cfg: dict, summary: dict, peak_mem: float | None, wall_time: float | None,
+              trainable_params: int | None = None) -> dict:
     ev   = summary.get("eval", summary)   # full_ft nests under "eval"
     base = ev.get("baseline_metrics", {})
     adpt = ev.get(cfg["summary_key"], {})
 
+    # prefer parsed-from-stdout value; fall back to summary.json
+    tp = (trainable_params
+          or summary.get("trainable_params")
+          or ev.get("trainable_params")
+          or "")
+
     row = {
         "method":           cfg["name"],
-        "trainable_params": summary.get("trainable_params", ev.get("trainable_params", "")),
+        "trainable_params": tp,
         "peak_gpu_mb":      round(peak_mem, 1) if peak_mem is not None else "",
         "wall_time_s":      round(wall_time, 1) if wall_time is not None else "",
     }
@@ -255,8 +268,9 @@ def main():
 
         run_dir = outdir / cfg["run_dir"]
         run_dir.mkdir(parents=True, exist_ok=True)
-        peak_mem  = None
-        wall_time = None
+        peak_mem         = None
+        wall_time        = None
+        trainable_params = None
 
         # ---- train ----
         train_cmd = [
@@ -277,9 +291,11 @@ def main():
                           "--num_neg_eval", str(args.num_neg_eval)]
 
         ok, output = run_and_capture(train_cmd, f"TRAIN {cfg['name']}")
+        trainable_params = None
         if ok:
-            peak_mem  = parse_memory(output)
-            wall_time = parse_wall_time(output)
+            peak_mem         = parse_memory(output)
+            wall_time        = parse_wall_time(output)
+            trainable_params = parse_trainable_params(output)
 
         # ---- eval (separate script methods) ----
         if cfg["eval_script"] is not None:
@@ -320,7 +336,7 @@ def main():
         if wall_time is None:
             wall_time = summary.get("wall_time_s")
 
-        row = build_row(cfg, summary, peak_mem, wall_time)
+        row = build_row(cfg, summary, peak_mem, wall_time, trainable_params)
         rows.append(row)
         print(f"  [{cfg['name']}] NDCG@10 %Δ = {row.get('ndcg@10_pct_change', 'N/A')}")
 
