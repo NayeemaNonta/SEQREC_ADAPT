@@ -73,7 +73,7 @@ def main():
     print(f"[sweep] {total} configs  →  {sweep_log.path}")
 
     for run_id, cfg in enumerate(configs, 1):
-        name    = f"run{run_id:03d}_k{cfg['num_clusters']}_bd{cfg['bottleneck_dim']}_lr{cfg['lr']}"
+        name    = f"run{run_id:03d}_k{cfg['num_clusters']}_bd{cfg['bottleneck_dim']}_lr{cfg['lr']}_ep{cfg['epochs']}"
         run_dir = base_out / name
         ev_dir  = base_out / f"{name}_eval"
 
