@@ -35,7 +35,7 @@ from sweep_utils import run_cmd, load_summary, build_sweep_row
 
 BEST = {
     "num_clusters":   5,
-    "bottleneck_dim": 32,
+    "bottleneck_dim": 64,
     "lr":             1e-3,
     "epochs":         20,
 }
