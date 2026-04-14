@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c 'import json; print\\(json.dumps\\(json.load\\(open\\('\\\\''__TRACKED_VAR__'\\\\''\\)\\), indent=2\\)\\)')"
+    ]
+  }
+}

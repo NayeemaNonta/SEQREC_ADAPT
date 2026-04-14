@@ -45,6 +45,29 @@ All modes share the same:
 - Candidate set construction (1 target + 100 negatives, fixed seed)
 - Backbone checkpoint and item/user encoders
 
+## Dataset
+
+This project uses the **ThirtyMusic** dataset — approximately 30 million music listening events collected from Last.fm via the [Idomaar](https://github.com/D2KLab/idomaar) framework.
+
+**Download:** [https://recsys.deib.polimi.it/datasets/](https://recsys.deib.polimi.it/datasets/)  
+Direct link to the dataset page: search for *"ThirtyMusic"* on the RecSys Polimi datasets page, or use the Idomaar repository linked above.
+
+Once downloaded, place the raw file at:
+
+```
+data/ThirtyMusic/relations/events.idomaar
+```
+
+Then convert it to the CSV format expected by this pipeline:
+
+```bash
+python data/create_dataset/prepare_30music_csv.py
+```
+
+This produces `data/data_csv/30M.csv` with columns `user, item, timestamp`. No filtering is applied at this stage — k-core filtering and preprocessing happen in the pipeline steps below.
+
+> The conversion filters out events with `playtime < 1` second. Approximately 30M rows are retained.
+
 ## Quickstart
 
 ### 1. Build dataset splits
