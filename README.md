@@ -214,3 +214,7 @@ Baseline and adapted model score **the same candidate set per user** to ensure c
 - **No shared state between adaptation modes**: each mode's train/eval/sweep scripts are self-contained
 - **Config-driven**: all hyperparameters accessible via CLI; default configs in `adaptation/*/config.yaml`
 - **Reproducibility**: explicit `--seed` argument in all scripts; fixed candidate sets per user
+
+## AI Acknowledgement
+
+Parts of this codebase were developed with the assistance of [Claude](https://claude.ai) (Anthropic). AI assistance was used to help generate, refactor, and debug code across the data pipeline, adaptation modules, and analysis scripts.
